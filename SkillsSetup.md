@@ -15,7 +15,7 @@ graphify .
 
 Generate API key :
 https://platform.openai.com/api-keys
-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
+
 
 read -s "OPENAI_API_KEY?Paste OpenAI API key: "
 export OPENAI_API_KEY
