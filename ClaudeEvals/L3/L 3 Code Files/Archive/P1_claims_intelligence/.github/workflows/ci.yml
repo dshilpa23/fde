@@ -1,0 +1,82 @@
+name: Claims Intelligence CI
+# Completed through Session 1 (M4) and Session 2 (M5, M7):
+#   - lint + unit tests            (starter)
+#   - eval gate (headless)         (S1, M4)
+#   - container verify             (S2, M5)
+#   - security review (non-blocking, reports only — S2, M7)
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (flake8)
+        run: flake8 . --max-line-length=100
+
+      - name: Unit tests
+        run: pytest tests/ -v --cov=. --cov-fail-under=60
+
+      # --- M4: eval gate ---
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      - name: Eval gate (headless)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: ./scripts/run_eval_gate.sh
+
+  verify-container:
+    needs: test  # eval gate (S1-M4) must pass first
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Deployment tooling image
+        run: podman build -t claims-intelligence -f Containerfile .
+
+      - name: Start services
+        run: podman-compose -f podman-compose.yml up -d
+
+      - name: Wait for api to be ready
+        run: |
+          for i in {1..15}; do
+            curl -sf http://localhost:8000/health && break
+            echo "Waiting... attempt $i"; sleep 3
+          done
+
+      - name: Verify /health responds
+        run: curl -sf http://localhost:8000/health | grep '"status":"ok"'
+
+      - name: Tear down
+        if: always()
+        run: podman-compose -f podman-compose.yml down -v
+
+  security-review:
+    needs: test
+    runs-on: ubuntu-latest
+    continue-on-error: true  # findings are visible, not blocking — a human decides
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      - name: Diff against base branch
+        run: git diff origin/${{ github.base_ref || 'main' }}...HEAD > pr_diff.txt
+
+      - name: Run security-reviewer
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude -p "Use the security-reviewer agent to audit pr_diff.txt for PII handling and injection risk. Output a markdown report." \
+            >> "$GITHUB_STEP_SUMMARY"

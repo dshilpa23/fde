@@ -1,0 +1,50 @@
+openapi: 3.0.3
+info:
+  title: UHG Claims Intelligence Service
+  version: "1.0.0"
+  description: >
+    Spec-driven contract for the /claims/{claim_id}/status route (M6).
+    This is the source of truth for that route — implementation, and
+    the tests generated from it, must satisfy every contract below.
+    Other read-only routes (count, total-billed, member lookup,
+    network check) are simple enough that CLAUDE.md's domain rules
+    are sufficient and they are not currently spec-driven; see the
+    note in CLAUDE.md's "Spec-driven engineering" section.
+
+paths:
+  /claims/{claim_id}/status:
+    get:
+      summary: Get current claim status
+      parameters:
+        - name: claim_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^CLM-[0-9]+"
+      responses:
+        "200":
+          description: Claim found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimStatus"
+        "404":
+          description: Claim not found
+
+components:
+  schemas:
+    ClaimStatus:
+      type: object
+      required: [claim_id, status]
+      properties:
+        claim_id:
+          type: string
+          example: "CLM-003"
+        status:
+          type: string
+          enum: [submitted, in_review, approved, denied, pending_info]
+        out_of_network:
+          type: boolean
+        note:
+          type: string

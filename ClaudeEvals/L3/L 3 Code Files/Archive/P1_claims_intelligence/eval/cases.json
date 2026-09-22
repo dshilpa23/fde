@@ -1,0 +1,145 @@
+{
+  "description": "UHG Claims Intelligence Service — L3 rubric-based eval suite (M3). 20 cases across 6 categories: count, aggregation, member, provider, status, edge. Scored 0.0-1.0 by the eval-runner sub-agent, threshold 0.80.",
+  "cases": [
+    {
+      "id": "eval-001",
+      "scenario": "Count claims currently in_review",
+      "expected_behaviour": "The service correctly counts only claims with status == in_review (3 claims: CLM-002, CLM-006, CLM-009), excluding pending_info.",
+      "rubric": "Read claims_service.py. Confirm count_claims_by_status filters on the exact string 'in_review'. Confirm it does not accidentally include pending_info rows. Score 1.0 if both checks pass, 0.5 if only one passes, 0.0 if neither passes.",
+      "tags": ["count", "status"]
+    },
+    {
+      "id": "eval-002",
+      "scenario": "Count approved claims",
+      "expected_behaviour": "count_claims_by_status('approved') returns 2 (CLM-001, CLM-005).",
+      "rubric": "Trace count_claims_by_status against seed_data.CLAIMS. Score 1.0 if the returned count equals 2 and the function only matches exact status strings, 0.5 if the logic is directionally right but off by one, 0.0 otherwise.",
+      "tags": ["count"]
+    },
+    {
+      "id": "eval-003",
+      "scenario": "Count denied claims",
+      "expected_behaviour": "count_claims_by_status('denied') returns 2 (CLM-004, CLM-008).",
+      "rubric": "Trace count_claims_by_status against seed_data.CLAIMS. Score 1.0 if the returned count equals 2, 0.0 otherwise.",
+      "tags": ["count"]
+    },
+    {
+      "id": "eval-004",
+      "scenario": "Count claims with an invalid status value",
+      "expected_behaviour": "count_claims_by_status raises ValueError for any status not in VALID_STATUSES, rather than silently returning 0.",
+      "rubric": "Read count_claims_by_status. Score 1.0 if it explicitly validates against VALID_STATUSES and raises ValueError on an unknown status, 0.5 if it returns 0 silently (fails softly but doesn't crash the API), 0.0 if it raises an unhandled exception type or crashes ungracefully.",
+      "tags": ["count", "validation"]
+    },
+    {
+      "id": "eval-005",
+      "scenario": "Total billed amount for denied claims",
+      "expected_behaviour": "total_billed_for_status('denied') returns exactly 10450.00 (875.25 + 9574.75), with no floating-point precision loss.",
+      "rubric": "Read total_billed_for_status. Confirm the sum equals 10450.00 to the cent. Score 1.0 only if the function keeps values as Decimal throughout and returns a precise result, 0.5 if the result is numerically correct but the function casts to float internally (precision risk even if this particular sum happens to round cleanly), 0.0 if the total is wrong.",
+      "tags": ["aggregation"]
+    },
+    {
+      "id": "eval-006",
+      "scenario": "Total billed amount for approved claims",
+      "expected_behaviour": "total_billed_for_status('approved') returns exactly 770.00 (450.00 + 320.00).",
+      "rubric": "Confirm the sum equals 770.00 exactly. Score 1.0 if exact, 0.0 if off by even a cent due to float rounding.",
+      "tags": ["aggregation"]
+    },
+    {
+      "id": "eval-007",
+      "scenario": "Total billed amount for pending_info claims",
+      "expected_behaviour": "total_billed_for_status('pending_info') returns exactly 6150.50 (2750.50 + 3400.00).",
+      "rubric": "Confirm the sum equals 6150.50 exactly. Score 1.0 if exact, 0.0 if off by even a cent due to float rounding.",
+      "tags": ["aggregation"]
+    },
+    {
+      "id": "eval-008",
+      "scenario": "total_billed_for_status does not lose precision (deliberate bug check)",
+      "expected_behaviour": "The function must keep billed_amount as Decimal throughout the sum and only convert at the API boundary, if at all — never cast each value to float() before summing.",
+      "rubric": "Read total_billed_for_status line by line. Score 0.0 if the function casts each claim's billed_amount to float() before accumulating (the known deliberate bug). Score 1.0 only after this is fixed to sum Decimal values directly. This case exists specifically to catch and force the fix of that bug.",
+      "tags": ["aggregation", "regression"]
+    },
+    {
+      "id": "eval-009",
+      "scenario": "Claims for a member with multiple claims",
+      "expected_behaviour": "claims_for_member('MBR-001') returns exactly 2 claims: CLM-001 and CLM-003.",
+      "rubric": "Trace claims_for_member against seed_data.CLAIMS filtered by member_id == 'MBR-001'. Score 1.0 if both claim_ids are present and no others, 0.0 otherwise.",
+      "tags": ["member"]
+    },
+    {
+      "id": "eval-010",
+      "scenario": "Claims for a different member",
+      "expected_behaviour": "claims_for_member('MBR-004') returns exactly 2 claims: CLM-005 and CLM-009.",
+      "rubric": "Trace claims_for_member against seed_data.CLAIMS filtered by member_id == 'MBR-004'. Score 1.0 if both claim_ids are present and no others, 0.0 otherwise.",
+      "tags": ["member"]
+    },
+    {
+      "id": "eval-011",
+      "scenario": "Claims for an unknown member_id",
+      "expected_behaviour": "claims_for_member raises ValueError for a member_id not present in seed_data.MEMBERS, rather than silently returning an empty list.",
+      "rubric": "Read claims_for_member. Score 1.0 if it calls _member_lookup first and raises ValueError when the member is not found, 0.0 if it returns an empty list without distinguishing 'no claims' from 'unknown member'.",
+      "tags": ["member", "validation"]
+    },
+    {
+      "id": "eval-012",
+      "scenario": "Out-of-network detection for a pending_info claim",
+      "expected_behaviour": "is_out_of_network('CLM-003') returns True — the claim's provider is NPI-100004, which has in_network: False in seed_data.PROVIDERS.",
+      "rubric": "Trace is_out_of_network against seed_data.PROVIDERS for provider_id NPI-100004. Score 1.0 if it returns True, 0.0 if it returns False or raises.",
+      "tags": ["provider"]
+    },
+    {
+      "id": "eval-013",
+      "scenario": "Out-of-network detection for an in-network claim",
+      "expected_behaviour": "is_out_of_network('CLM-002') returns False — the claim's provider is NPI-100002, which has in_network: True.",
+      "rubric": "Trace is_out_of_network against seed_data.PROVIDERS for provider_id NPI-100002. Score 1.0 if it returns False, 0.0 if it returns True or raises.",
+      "tags": ["provider"]
+    },
+    {
+      "id": "eval-014",
+      "scenario": "Out-of-network check for an unknown claim_id",
+      "expected_behaviour": "is_out_of_network raises ValueError for a claim_id not present in seed_data.CLAIMS.",
+      "rubric": "Read is_out_of_network. Score 1.0 if it explicitly checks for a None claim lookup and raises ValueError with a clear message, 0.0 if it raises an unrelated exception (e.g. AttributeError on None) or returns a default value silently.",
+      "tags": ["provider", "validation"]
+    },
+    {
+      "id": "eval-015",
+      "scenario": "Status history for an out-of-network claim routed to pending_info",
+      "expected_behaviour": "claim_status_history('CLM-007') reports status 'pending_info', out_of_network True, and a non-empty note explaining the routing (per the domain rule: out-of-network providers always trigger pending_info).",
+      "rubric": "Trace claim_status_history for CLM-007 (provider NPI-100005, out-of-network). Score 1.0 if status, out_of_network, and note all match expected values, 0.5 if status and out_of_network are correct but the note is missing or generic, 0.0 otherwise.",
+      "tags": ["status"]
+    },
+    {
+      "id": "eval-016",
+      "scenario": "Status history for an in-network approved claim",
+      "expected_behaviour": "claim_status_history('CLM-005') reports status 'approved', out_of_network False, and an empty note.",
+      "rubric": "Trace claim_status_history for CLM-005 (provider NPI-100002, in-network). Score 1.0 if status, out_of_network, and note all match expected values, 0.0 otherwise.",
+      "tags": ["status"]
+    },
+    {
+      "id": "eval-017",
+      "scenario": "Status lifecycle domain rule: pending_info claims still get an AuditLog entry",
+      "expected_behaviour": "Per CLAUDE.md's Lessons Learned entry (2026-06-10), every status — including pending_info, not just approved/denied — creates an AuditLog entry when reached.",
+      "rubric": "Search main.py and services/claims_service.py for AuditLog creation logic. Score 1.0 if pending_info transitions create an AuditLog entry identically to approved/denied transitions, 0.5 if AuditLog exists but pending_info is missed, 0.0 if there is no AuditLog logic at all.",
+      "tags": ["status", "regression"]
+    },
+    {
+      "id": "eval-018",
+      "scenario": "Status counting does not substring-match adjacent statuses",
+      "expected_behaviour": "count_claims_by_status('in_review') must not accidentally include 'pending_info' rows just because both statuses can appear in the same claims list — the match must be exact string equality, not substring or prefix matching.",
+      "rubric": "Read count_claims_by_status. Score 1.0 if the comparison is c['status'] == status (exact match), 0.0 if it uses any form of substring, 'in', or regex matching that could cross-match statuses.",
+      "tags": ["edge", "count"]
+    },
+    {
+      "id": "eval-019",
+      "scenario": "Aggregation over a status with only one claim",
+      "expected_behaviour": "total_billed_for_status('submitted') returns exactly 210.00 — correct behaviour on a single-record aggregation, not just multi-record sums.",
+      "rubric": "Trace total_billed_for_status against the single submitted claim CLM-010 (210.00). Score 1.0 if the result is exactly 210.00, 0.0 otherwise. This case exists to catch off-by-one or empty-list-handling bugs that only show up with exactly one matching record.",
+      "tags": ["edge", "aggregation"]
+    },
+    {
+      "id": "eval-020",
+      "scenario": "API returns a proper error for an unknown member_id, not a 500",
+      "expected_behaviour": "GET /claims/member/{member_id} for an unknown member_id returns a 4xx response with a clear error message, rather than an unhandled 500 from the ValueError raised by claims_for_member.",
+      "rubric": "Read the /claims/member/{member_id} route in main.py. Score 1.0 if it catches the ValueError from claims_for_member and returns an HTTPException with a 4xx status code, 0.5 if it returns a 4xx but with an unhelpful or missing error message, 0.0 if the ValueError propagates unhandled (500).",
+      "tags": ["edge", "member"]
+    }
+  ]
+}

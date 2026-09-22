@@ -1,0 +1,24 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: uhg
+      POSTGRES_PASSWORD: uhg
+      POSTGRES_DB: claims_audit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uhg"]
+      interval: 10s
+      retries: 5
+
+volumes:
+  pgdata:
